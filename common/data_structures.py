@@ -222,6 +222,12 @@ class Examples:
         pl_tensor = self._id_to_embd(pl_id_tensor, self.PL_index)
         return nl_tensor, pl_tensor
 
+    def id_triplet_to_embd_triplet(self,nl_id_tensor, pos_pl_id_tensor, neg_pl_id_tensor):
+        nl_tensor = self._id_to_embd(nl_id_tensor, self.NL_index)
+        pos_tensor = self._id_to_embd(pos_pl_id_tensor, self.PL_index)
+        neg_tensor = self._id_to_embd(neg_pl_id_tensor, self.PL_index)
+        return nl_tensor, pos_tensor , neg_tensor
+
     def id_pair_to_feature_pair(self, nl_id_tensor: Tensor, pl_id_tensor: Tensor) \
             -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """Convert id pairs into embdding pairs"""
@@ -264,6 +270,21 @@ class Examples:
         sampler = RandomSampler(pos)
         dataset = DataLoader(pos, batch_size=batch_size, sampler=sampler)
         return dataset
+
+    def random_neg_sampling_dataloader(self, batch_size):
+        pos, neg = [], []
+        for nl_id in tqdm(self.rel_index, desc="random_neg_sampling_dataset"):
+            pos_pl_ids = self.rel_index[nl_id]
+            for p_id in pos_pl_ids:
+                pos.append((nl_id, p_id, 1))
+            sample_num = len(pos_pl_ids)
+            sel_neg_ids = exclude_and_sample(set(self.PL_index.keys()), pos_pl_ids, sample_num)
+            for n_id in sel_neg_ids:
+                neg.append((nl_id, n_id, 0))
+        sampler = RandomSampler(pos + neg)
+        dataset = DataLoader(pos + neg, batch_size=batch_size, sampler=sampler)
+        return dataset
+
 
     def make_online_neg_sampling_batch(self, batch: Tuple, model, hard_ratio):
         """
@@ -324,12 +345,8 @@ class Examples:
         for neg_batch in neg_loader:
             with torch.no_grad():
                 model.eval()
-                inputs = format_batch_input(neg_batch, self, model)
-                text_hidden = model.create_nl_embd(inputs['text_ids'], inputs['text_attention_mask'])[0]
-                code_hidden = model.create_pl_embd(inputs['code_ids'], inputs['code_attention_mask'])[0]
-                sim_scores = model.get_sim_score(text_hidden=text_hidden, code_hidden=code_hidden)
-                # del text_hidden
-                # del code_hidden
+                nl_embd, pl_embd = format_batch_input(neg_batch, self)
+                sim_scores = model.get_sim_score(text_hidden=nl_embd, code_hidden=pl_embd)
                 for nl, pl, score in zip(neg_batch[0].tolist(), neg_batch[1].tolist(), sim_scores):
                     neg[nl].append((pl, score))
 

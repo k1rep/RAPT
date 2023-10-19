@@ -8,7 +8,7 @@ from tqdm import trange, tqdm
 from transformers import get_linear_schedule_with_warmup
 from common.data_structures import Examples
 from common.utils import format_batch_input, write_tensor_board, save_check_point, evaluate_classification, \
-    evaluate_retrival, load_check_point
+    evaluate_retrival, load_check_point, format_triplet_batch_input
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +121,83 @@ def train_with_neg_sampling(args, model, train_examples: Examples, valid_example
                 write_tensor_board(tb_writer, tb_data, args.global_step)
         args.steps_trained_in_current_epoch += 1
 
+def train_with_neg_sampling_triplet(args, model, train_examples: Examples, valid_examples: Examples, optimizer,
+                            scheduler, tb_writer, step_bar, skip_n_steps):
+    """
+    Create training dataset at epoch level.
+    """
+
+    tr_loss, tr_ac = 0, 0
+    batch_size = args.per_gpu_train_batch_size
+    train_dataloader = train_examples.online_neg_sampling_dataloader(batch_size=int(batch_size / 2))  # (n_id,p_id,1)
+
+    for step, batch in tqdm(enumerate(train_dataloader), total=len(train_dataloader)):
+        if skip_n_steps > 0:
+            skip_n_steps -= 1
+            continue
+        batch = train_examples.make_online_triplet_sampling_batch(batch, model)
+        if batch == ():
+            continue
+        model.train()
+        nl_tensor, pos_tensor , neg_tensor = format_triplet_batch_input(batch, train_examples)
+
+        outputs = model(nl_tensor, pos_tensor , neg_tensor)
+        loss = outputs['loss']
+
+        if args.n_gpu > 1:
+            loss = loss.mean()  # mean() to average on multi-gpu parallel (not distributed) training
+        if args.gradient_accumulation_steps > 1:
+            loss = loss / args.gradient_accumulation_steps
+
+        if args.fp16:
+            try:
+                from apex import amp
+                with amp.scale_loss(loss, optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            except ImportError:
+                raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        else:
+            loss.backward()
+        tr_loss += loss.item()
+
+        if (step + 1) % args.gradient_accumulation_steps == 0:
+            if args.fp16:
+                torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
+            else:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
+            optimizer.step()
+            scheduler.step()
+            model.zero_grad()
+            args.global_step += 1
+            step_bar.update()
+
+            if args.local_rank in [-1, 0] and args.logging_steps > 0 and args.global_step % args.logging_steps == 0:
+                tb_data = {
+                    'lr': scheduler.get_last_lr()[0],
+                    'acc': tr_ac / args.logging_steps / (
+                            args.train_batch_size * args.gradient_accumulation_steps),
+                    'loss': tr_loss / args.logging_steps
+                }
+                write_tensor_board(tb_writer, tb_data, args.global_step)
+                tr_loss = 0.0
+                tr_ac = 0.0
+
+            if args.valid_step > 0 and args.global_step % args.valid_step == 1:
+                valid_accuracy = evaluate_classification(valid_examples, model,
+                                                                     args.per_gpu_eval_batch_size,
+                                                                     "result/train/{}".format(
+                                                                         args.data_name))
+                pk, best_f1, map = evaluate_retrival(model, valid_examples, args.per_gpu_eval_batch_size,
+                                                     "result/train/{}".format(args.data_name))
+                tb_data = {
+                    "valid_accuracy": valid_accuracy,
+                    "precision@3": pk,
+                    "best_f1": best_f1,
+                    "MAP": map
+                }
+                write_tensor_board(tb_writer, tb_data, args.global_step)
+        args.steps_trained_in_current_epoch += 1
+
 
 def get_optimizer_scheduler(args, model, train_steps):
     no_decay = ["bias", "LayerNorm.weight"]
@@ -190,7 +267,6 @@ def train(args, train_examples, valid_examples, model, train_iter_method):
     if args.model_path and os.path.exists(args.model_path):
         ckpt = load_check_point(model, args.model_path)
         model = ckpt["model"]
-        args = ckpt['args'] if ckpt['args'] else args
         logger.info("  Continuing training from checkpoint, will skip to saved global_step")
         logger.info("  Continuing training from epoch {}, global step {}".format(args.epochs_trained, args.global_step))
     else:

@@ -58,30 +58,23 @@ class TBertT(PreTrainedModel):
         self.ntokenizer = self.ctokneizer
         self.nbert = self.cbert
 
-        self.cls = RelationClassifyHeader(config)
+        # self.cls = RelationClassifyHeader(config)
+        self.cls = CosineTrainHeader(config)
 
     def forward(
             self,
-            code_ids=None,
-            code_attention_mask=None,
-            text_ids=None,
-            text_attention_mask=None,
-            relation_label=None):
-        c_hidden = self.cbert(code_ids, attention_mask=code_attention_mask)[0]
-        n_hidden = self.nbert(text_ids, attention_mask=text_attention_mask)[0]
+            text_hidden,
+            pos_code_hidden,
+            neg_code_hidden
+    ):
 
-        logits = self.cls(code_hidden=c_hidden, text_hidden=n_hidden)
-        output_dict = {"logits": logits}
-        if relation_label is not None:
-            loss_fct = CrossEntropyLoss()
-            rel_loss = loss_fct(logits.view(-1, 2), relation_label.view(-1))
-            output_dict['loss'] = rel_loss
-        return output_dict  # (rel_loss), rel_score
+        loss = self.cls(text_hidden, pos_code_hidden, neg_code_hidden)
+        output_dict = {"loss": loss}
+        return output_dict
 
     def get_sim_score(self, text_hidden, code_hidden):
-        logits = self.cls(text_hidden=text_hidden, code_hidden=code_hidden)
-        sim_scores = torch.softmax(logits, 1).data.tolist()
-        return [x[1] for x in sim_scores]
+        sim_scores = self.cls.get_sim(text_hidden=text_hidden, code_hidden=code_hidden).data
+        return sim_scores
 
     def get_nl_tokenizer(self):
         return self.ntokenizer
@@ -118,6 +111,14 @@ class CosineTrainHeader(nn.Module):
         anchor_sim = F.cosine_similarity(pool_text_hidden, pool_pos_code_hidden)
         neg_sim = F.cosine_similarity(pool_text_hidden, pool_neg_code_hidden)
         loss = (self.margin - anchor_sim + neg_sim).clamp(min=1e-6).mean()
-        return loss, anchor_sim, neg_sim
+        loss.requires_grad_(True)
+        return loss
+
+    def get_sim(self,text_hidden,code_hidden):
+        pool_code_hidden = self.code_pooler(code_hidden)
+        pool_text_hidden = self.text_pooler(text_hidden)
+        sim = F.cosine_similarity(pool_text_hidden, pool_code_hidden)
+        return torch.tensor(sim, dtype=torch.long)
+
 
 

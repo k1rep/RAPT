@@ -44,58 +44,24 @@ def format_batch_input_for_single_bert(batch, examples, model):
     return inputs
 
 
-def format_batch_input(batch, examples, model):
+def format_batch_input(batch, examples):
     """
     move tensors to device
     :param batch:
     :param examples:
-    :param model:
     :return:
     """
     nl_ids, pl_ids, labels = batch[0], batch[1], batch[2]
-    features = examples.id_pair_to_feature_pair(nl_ids, pl_ids)
-    features = [t.to(model.device) for t in features]
-    nl_in, nl_att, pl_in, pl_att = features
-    inputs = {
-        "text_ids": nl_in,
-        "text_attention_mask": nl_att,
-        "code_ids": pl_in,
-        "code_attention_mask": pl_att,
-    }
-    return inputs
+    nl_embd, pl_embd = examples.id_pair_to_embd_pair(nl_ids, pl_ids)
+    return nl_embd, pl_embd
 
 
-def format_triplet_batch_input(batch, examples, model):
+
+def format_triplet_batch_input(batch, examples):
     anchor_ids, pos_cid, neg_cid = batch[0], batch[1], batch[2]
-    features = examples.id_triplet_to_feature_triplet(nl_id_tensor=anchor_ids, pos_pl_id_tensor=pos_cid,
+    nl_tensor, pos_tensor , neg_tensor = examples.id_triplet_to_embd_triplet(nl_id_tensor=anchor_ids, pos_pl_id_tensor=pos_cid,
                                                       neg_pl_id_tensor=neg_cid)
-    features = [t.to(model.device) for t in features]
-    nl_in, nl_att, pos_pl_in, pos_pl_att, neg_pl_in, neg_pl_att = features
-    inputs = {
-        "text_ids": nl_in,
-        "text_attention_mask": nl_att,
-        "pos_code_ids": pos_pl_in,
-        "pos_code_attention_mask": pos_pl_att,
-        "neg_code_ids": neg_pl_in,
-        "neg_code_attention_mask": neg_pl_att,
-    }
-    return inputs
-
-
-def format_triplet_batch(batch, examples, model):
-    anchor, pos_ids, neg_ids = batch[0], batch[1], batch[2]
-    features = examples.id_triplet_to_feature_triplet(anchor, pos_ids, neg_ids)
-    features = [t.to(model.device) for t in features]
-    anch_in, anch_att, pos_in, pos_att, neg_in, neg_att = features
-    inputs = {
-        "text_ids": anch_in,
-        "text_attention_mask": anch_att,
-        "pos_code_ids": pos_in,
-        "pos_code_attention_mask": pos_att,
-        "neg_code_ids": neg_in,
-        "neg_code_attention_mask": neg_att,
-    }
-    return inputs
+    return nl_tensor, pos_tensor , neg_tensor
 
 
 def write_tensor_board(tb_writer, data, step):
@@ -138,13 +104,9 @@ def load_check_point(model, ckpt_dir):
     logger.info(
         "Loading checkpoint from {}".format(ckpt_dir))
     model_path = os.path.join(ckpt_dir, MODEL_FNAME)
-    arg_path = os.path.join(ckpt_dir, ARG_FNAME)
     model.load_state_dict(torch.load(model_path), strict=False)
 
-    args = None
-    if os.path.isfile(arg_path):
-        args = torch.load(os.path.join(ckpt_dir, ARG_FNAME))
-    return {'model': model, "args": args}
+    return {'model': model}
 
 
 def results_to_df(res: List[Tuple]) -> DataFrame:
@@ -156,7 +118,7 @@ def results_to_df(res: List[Tuple]) -> DataFrame:
     return df
 
 
-def evaluate_classification(eval_examples, model, batch_size, output_dir, append_label=True):
+def evaluate_classification(eval_examples, model, batch_size, output_dir):
     """
 
     :param eval_examples:
@@ -177,30 +139,20 @@ def evaluate_classification(eval_examples, model, batch_size, output_dir, append
     clsfy_res = []
     num_correct = 0
     eval_num = 0
-    eval_loss = 0
 
     for batch in tqdm(eval_dataloader, desc="Classify Evaluating"):
         with torch.no_grad():
             model.eval()
             labels = batch[2].to(model.device)
-            inputs = format_batch_input(batch, eval_examples, model)
-            if append_label:
-                inputs['relation_label'] = labels
-
-            outputs = model(**inputs)
-            logit = outputs['logits']
-            if append_label:
-                loss = outputs['loss'].item()
-                eval_loss += loss
-            y_pred = logit.data.max(1)[1]
-
+            nl_tensor, pl_tensor = eval_examples.id_pair_to_embd_pair(batch[0], batch[1])
+            nl_tensor, pl_tensor = nl_tensor.to(model.device), pl_tensor.to(model.device)
+            y_pred = model.get_sim_score(nl_tensor, pl_tensor) > 0.5
             batch_correct = y_pred.eq(labels).long().sum().item()
             num_correct += batch_correct
             eval_num += y_pred.size()[0]
             clsfy_res.append((y_pred, labels, batch_correct))
 
     accuracy = num_correct / eval_num
-    eval_loss = eval_loss / len(eval_dataloader)
     tqdm.write("\nevaluate accuracy={}\n".format(accuracy))
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
@@ -209,7 +161,7 @@ def evaluate_classification(eval_examples, model, batch_size, output_dir, append
         for res in clsfy_res:
             fout.write(
                 "pred:{}, label:{}, num_correct:{}\n".format(str(res[0].tolist()), str(res[1].tolist()), str(res[2])))
-    return accuracy, eval_loss
+    return accuracy
 
 
 def evaluate_retrival(model, eval_examples, batch_size, res_dir):
@@ -229,7 +181,7 @@ def evaluate_retrival(model, eval_examples, batch_size, res_dir):
             model.eval()
             nl_embd = nl_embd.to(model.device)
             pl_embd = pl_embd.to(model.device)
-            sim_score = model.get_sim_score(text_hidden=nl_embd, code_hidden=pl_embd)
+            sim_score = model.get_sim_score(text_hidden=nl_embd, code_hidden=pl_embd).cpu()
             for n, p, prd, lb in zip(nl_ids.tolist(), pl_ids.tolist(), sim_score, labels.tolist()):
                 res.append((n, p, prd, lb))
 
@@ -242,36 +194,6 @@ def evaluate_retrival(model, eval_examples, batch_size, res_dir):
     map = m.MAP_at_K(3)
 
     summary = "\nprecision@3={}, best_f1 = {}, best_f2={}， MAP={}\n".format(pk, best_f1, best_f2, map)
-    with open(summary_path, 'w') as fout:
-        fout.write(summary)
-        fout.write(str(details))
-    return pk, best_f1, map
-
-
-def evalute_retrivial_for_single_bert(model, eval_examples, batch_size, res_dir):
-    if not os.path.isdir(res_dir):
-        os.makedirs(res_dir)
-    retr_res_path = os.path.join(res_dir, "raw_result.csv")
-    summary_path = os.path.join(res_dir, "summary.txt")
-    retrival_dataloader = eval_examples.get_retrivial_task_dataloader(batch_size)
-    res = []
-    for batch in tqdm(retrival_dataloader, desc="retrival evaluation"):
-        nl_ids = batch[0]
-        pl_ids = batch[1]
-        labels = batch[2]
-        inputs = format_batch_input_for_single_bert(batch, eval_examples, model)
-        sim_score = model.get_sim_score(**inputs)
-        for n, p, prd, lb in zip(nl_ids.tolist(), pl_ids.tolist(), sim_score, labels.tolist()):
-            res.append((n, p, prd, lb))
-    df = results_to_df(res)
-    df.to_csv(retr_res_path)
-    m = metrics(df, output_dir=res_dir)
-
-    pk = m.precision_at_K(3)
-    best_f1, best_f2, details, _ = m.precision_recall_curve("pr_curve.png")
-    map = m.MAP_at_K(3)
-
-    summary = "\nprecision@3={}, best_f1 = {}, best_f2={}, MAP={}\n".format(pk, best_f1, best_f2, map)
     with open(summary_path, 'w') as fout:
         fout.write(summary)
         fout.write(str(details))

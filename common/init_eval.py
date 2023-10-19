@@ -55,7 +55,7 @@ def test(args, model, eval_examples, cache_file, batch_size=1000):
             model.eval()
             nl_embd = nl_embd.to(model.device)
             pl_embd = pl_embd.to(model.device)
-            sim_score = model.get_sim_score(text_hidden=nl_embd, code_hidden=pl_embd)
+            sim_score = model.get_sim_score(text_hidden=nl_embd, code_hidden=pl_embd).cpu()
             for n, p, prd, lb in zip(nl_ids.tolist(), pl_ids.tolist(), sim_score, labels.tolist()):
                 res.append((n, p, prd, lb))
 
@@ -64,3 +64,4 @@ def test(args, model, eval_examples, cache_file, batch_size=1000):
     df.to_csv(retr_res_path)
     m = metrics(df, output_dir=args.output_dir)
     return m
+
