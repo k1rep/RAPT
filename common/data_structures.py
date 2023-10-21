@@ -11,7 +11,7 @@ from tqdm import tqdm
 from common.models import TBertT
 from torch import Tensor
 
-from common.utils import format_batch_input, format_batch_input_for_single_bert
+from common.utils import format_batch_input, map_file, map_iss, format_batch_input_for_single_bert
 
 F_ID = 'id'
 F_TOKEN = 'tokens'
@@ -91,32 +91,39 @@ class Examples:
 
         # hanlde duplicated NL and PL with reversed index
         reverse_NL_index = dict()
+        reverse_PL_index = dict()
 
         nl_id_max = 0
         pl_id_max = 0
         for r_exp in raw_examples:
-            nl_tks = clean_space(r_exp["NL"])
             pl_tks = r_exp["PL"]
+            if pl_tks in reverse_PL_index:
+                pl_id = reverse_PL_index[pl_tks]
+            else:
+                reverse_PL_index[pl_tks] = pl_id_max
+                pl_id = pl_id_max
+                pl_id_max += 1
+            PL_index[pl_id] = {F_TOKEN: pl_tks, F_ID: pl_id}
+            map_file[pl_id] = r_exp['PID']
 
+            if r_exp["NID"] == -1:
+                continue
+
+            nl_tks = clean_space(r_exp["NL"])
             if nl_tks in reverse_NL_index:
                 nl_id = reverse_NL_index[nl_tks]
             else:
-                reverse_NL_index[nl_tks]=nl_id_max
+                reverse_NL_index[nl_tks] = nl_id_max
                 nl_id = nl_id_max
                 nl_id_max += 1
-
-            pl_id = pl_id_max
-            pl_id_max += 1
-
             NL_index[nl_id] = {F_TOKEN: nl_tks, F_ID: nl_id}
-            PL_index[pl_id] = {F_TOKEN: pl_tks, F_ID: pl_id}  # keep space for PL
+            map_iss[nl_id] = r_exp['NID']
+
             rel_index[nl_id].add(pl_id)
-            nl_id += 1
-            pl_id += 1
         return NL_index, PL_index, rel_index
 
     def _gen_feature(self, example, tokenizer):
-        feature = tokenizer.encode_plus(example[F_TOKEN], max_length=512,truncation=True,
+        feature = tokenizer.encode_plus(example[F_TOKEN], max_length=512, truncation=True,
                                         padding='max_length', return_attention_mask=True,
                                         return_token_type_ids=False)
         res = {
@@ -214,6 +221,35 @@ class Examples:
                 for pid in pids:
                     label = 1 if self.__is_positive_case(nid, pid) else 0
                     examples.append((nid, pid, label))
+        return examples
+
+    def get_chunked_retrivial_task_examples_all(self, chunk_query_num=-1, chunk_size=1000):
+        nl_list = list(self.NL_index.keys())
+        pl_list = list(self.PL_index.keys())
+        examples = []
+        for nid in nl_list:
+            for pid in pl_list:
+                label = 1 if self.__is_positive_case(nid, pid) else 0
+                examples.append((nid, pid, label))
+        return examples
+
+    def get_chunked_retrivial_task_examples_batch(self, chunk_query_num=-1, chunk_size=1000):
+        examples = []
+        for nid in self.rel_index:
+            for pid in self.rel_index[nid]:
+                examples.append((nid, pid,1))
+
+        nl_list = list(self.NL_index.keys())
+        pl_list = list(self.PL_index.keys())
+        total = 0
+        sample_num = min(chunk_size, len(pl_list))
+        for nid in nl_list:
+            if total % chunk_size == 0:
+                pl_list_chunk = random.sample(pl_list, sample_num)
+            total += 1
+            for pid in pl_list_chunk:
+                if self.__is_positive_case(nid, pid) == 0:
+                    examples.append((nid, pid, 0))
         return examples
 
     def id_pair_to_embd_pair(self, nl_id_tensor: Tensor, pl_id_tensor: Tensor) -> Tuple[Tensor, Tensor]:
@@ -347,7 +383,7 @@ class Examples:
                 model.eval()
                 nl_embd, pl_embd = format_batch_input(neg_batch, self)
                 sim_scores = model.get_sim_score(text_hidden=nl_embd, code_hidden=pl_embd)
-                for nl, pl, score in zip(neg_batch[0].tolist(), neg_batch[1].tolist(), sim_scores):
+                for nl, pl, score in zip(neg_batch[0].tolist(), neg_batch[1].tolist(), sim_scores.tolist()):
                     neg[nl].append((pl, score))
 
         for nl_id, pl_id in zip(nl_ids, pl_ids):

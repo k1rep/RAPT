@@ -1,4 +1,1 @@
-import torch
-
-a=()
-print(a==())
+a = 1

@@ -118,7 +118,7 @@ class CosineTrainHeader(nn.Module):
         pool_code_hidden = self.code_pooler(code_hidden)
         pool_text_hidden = self.text_pooler(text_hidden)
         sim = F.cosine_similarity(pool_text_hidden, pool_code_hidden)
-        return torch.tensor(sim, dtype=torch.long)
+        return torch.tensor(sim)
 
 
 

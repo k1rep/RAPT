@@ -18,7 +18,8 @@ SCHED_FNAME = "scheduler.pt"
 ARG_FNAME = "training_args.bin"
 
 logger = logging.getLogger(__name__)
-
+map_file={}
+map_iss={}
 
 def format_batch_input_for_single_bert(batch, examples, model):
     tokenizer = model.tokenizer
@@ -182,8 +183,8 @@ def evaluate_retrival(model, eval_examples, batch_size, res_dir):
             nl_embd = nl_embd.to(model.device)
             pl_embd = pl_embd.to(model.device)
             sim_score = model.get_sim_score(text_hidden=nl_embd, code_hidden=pl_embd).cpu()
-            for n, p, prd, lb in zip(nl_ids.tolist(), pl_ids.tolist(), sim_score, labels.tolist()):
-                res.append((n, p, prd, lb))
+            for n, p, prd, lb in zip(nl_ids.tolist(), pl_ids.tolist(), sim_score.tolist(), labels.tolist()):
+                res.append((map_iss.get(n), map_file.get(p), prd, lb))
 
     df = results_to_df(res)
     df.to_csv(retr_res_path)

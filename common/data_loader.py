@@ -10,6 +10,8 @@ import multiprocessing
 import pandas as pd
 from tqdm import tqdm
 
+import common.utils
+
 sys.path.append("..")
 sys.path.append("../..")
 
@@ -22,7 +24,7 @@ from common.models import TBertT
 
 logger = logging.getLogger(__name__)
 
-def read_OSS_examples(data_dir):
+def read_OSS_examples(data_dir, type):
     commit_file = os.path.join(data_dir, "commit_file.csv")
     issue_file = os.path.join(data_dir, "issue_file.csv")
     link_file = os.path.join(data_dir, "link_file.csv")
@@ -32,12 +34,16 @@ def read_OSS_examples(data_dir):
     links = __read_artifacts(link_file, "link")
     issue_index = {x.issue_id: x for x in issues}
     commit_index = {}
+    commit_id_set = set()
     for c in commits:
-        if commit_index.get(c.commit_id,-1)==-1:
-            commit_index[c.commit_id]=[c]
+        if commit_index.get(c.commit_id, -1) == -1:
+            commit_index[c.commit_id] = [c]
+            commit_id_set.add(c.commit_id)
         else:
             commit_index[c.commit_id].append(c)
+    commit_link_id_set = set()
     for lk in links:
+        commit_link_id_set.add(lk[1])
         iss = issue_index[lk[0]]
         cm_list = commit_index[lk[1]]
         # join the tokenized content
@@ -46,24 +52,40 @@ def read_OSS_examples(data_dir):
             cm_text = str(cm.summary) + " " + cm.diffs
             example = {
                 "NL": iss_text,
-                "PL": cm_text
+                "NID": iss.issue_id,
+                "PL": cm_text,
+                "PID": cm.commit_id
             }
             examples.append(example)
+    if type == 'test':
+        intersection = commit_id_set - commit_link_id_set
+        for i in intersection:
+            cm_list = commit_index[i]
+            for cm in cm_list:
+                cm_text = str(cm.summary) + " " + cm.diffs
+                example = {
+                    "NL": "unlabeled!!",
+                    "NID": -1,
+                    "PL": cm_text,
+                    "PID": cm.commit_id
+                }
+                examples.append(example)
     return examples
 
 
-def load_examples(data_dir, model, num_limit):
+def load_examples(data_dir, model, num_limit, type='train'):
     cache_dir = os.path.join(data_dir, "cache")
     if not os.path.isdir(cache_dir):
         os.makedirs(cache_dir)
     logger.info("Creating examples from dataset file at {}".format(data_dir))
-    raw_examples = read_OSS_examples(data_dir)
+    raw_examples = read_OSS_examples(data_dir, type)
     if num_limit:
         raw_examples = raw_examples[:num_limit]
     examples = Examples(raw_examples)
     examples.update_features(model, multiprocessing.cpu_count())
     examples.update_embd(model)
     return examples
+
 
 def __read_artifact_dict(file_path, type):
     """

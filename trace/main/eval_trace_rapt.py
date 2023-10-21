@@ -14,7 +14,6 @@ from common.init_eval import get_eval_args, test
 from common.data_loader import load_examples
 from common.utils import MODEL_FNAME
 from common.models import TBertT
-
 if __name__ == "__main__":
     args = get_eval_args()
     device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
@@ -37,7 +36,7 @@ if __name__ == "__main__":
 
     start_time = time.time()
     test_dir = os.path.join(args.data_dir, "test")
-    test_examples = load_examples(test_dir, model=model, num_limit=args.test_num)
+    test_examples = load_examples(test_dir, model=model, num_limit=args.test_num, type='test')
     m = test(args, model, test_examples, cache_file=cached_file)
     exe_time = time.time() - start_time
     m.write_summary(exe_time)
