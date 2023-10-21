@@ -63,12 +63,16 @@ class TBertT(PreTrainedModel):
 
     def forward(
             self,
-            text_hidden,
-            pos_code_hidden,
-            neg_code_hidden
-    ):
-
-        loss = self.cls(text_hidden, pos_code_hidden, neg_code_hidden)
+            text_ids=None,
+            text_attention_mask=None,
+            pos_code_ids=None,
+            pos_code_attention_mask=None,
+            neg_code_ids=None,
+            neg_code_attention_mask=None):
+        pos_hidden = self.cbert(pos_code_ids, attention_mask=pos_code_attention_mask)[0]
+        neg_hidden = self.cbert(neg_code_ids, attention_mask=neg_code_attention_mask)[0]
+        text_hidden = self.nbert(text_ids, attention_mask=text_attention_mask)[0]
+        loss = self.cls(text_hidden, pos_hidden, neg_hidden)
         output_dict = {"loss": loss}
         return output_dict
 
