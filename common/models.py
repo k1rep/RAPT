@@ -114,7 +114,7 @@ class CosineTrainHeader(nn.Module):
         loss.requires_grad_(True)
         return loss
 
-    def get_sim(self,text_hidden,code_hidden):
+    def get_sim(self, text_hidden, code_hidden):
         pool_code_hidden = self.code_pooler(code_hidden)
         pool_text_hidden = self.text_pooler(text_hidden)
         sim = F.cosine_similarity(pool_text_hidden, pool_code_hidden)
