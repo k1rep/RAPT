@@ -38,89 +38,6 @@ def get_exp_name(args):
     return exp_name.format(time, base_model)
 
 
-def train_with_neg_sampling(args, model, train_examples: Examples, valid_examples: Examples, optimizer,
-                            scheduler, tb_writer, step_bar, skip_n_steps):
-    """
-    Create training dataset at epoch level.
-    """
-
-    tr_loss, tr_ac = 0, 0
-    batch_size = args.per_gpu_train_batch_size
-    train_dataloader = train_examples.online_neg_sampling_dataloader(batch_size=int(batch_size / 2))
-
-    for step, batch in tqdm(enumerate(train_dataloader), total=len(train_dataloader)):
-        if skip_n_steps > 0:
-            skip_n_steps -= 1
-            continue
-        batch = train_examples.make_online_neg_sampling_batch(batch, model, args.hard_ratio)
-        model.train()
-        labels = batch[2].to(model.device)
-        inputs = format_batch_input(batch, train_examples, model)
-        inputs['relation_label'] = labels
-
-        outputs = model(**inputs)
-        loss = outputs['loss']
-        logit = outputs['logits']
-        y_pred = logit.data.max(1)[1]
-        tr_ac += y_pred.eq(labels).long().sum().item()
-
-        if args.n_gpu > 1:
-            loss = loss.mean()  # mean() to average on multi-gpu parallel (not distributed) training
-        if args.gradient_accumulation_steps > 1:
-            loss = loss / args.gradient_accumulation_steps
-
-        if args.fp16:
-            try:
-                from apex import amp
-                with amp.scale_loss(loss, optimizer) as scaled_loss:
-                    scaled_loss.backward()
-            except ImportError:
-                raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
-        else:
-            loss.backward()
-        tr_loss += loss.item()
-
-        if (step + 1) % args.gradient_accumulation_steps == 0:
-            if args.fp16:
-                torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
-            else:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-            optimizer.step()
-            scheduler.step()
-            model.zero_grad()
-            args.global_step += 1
-            step_bar.update()
-
-            if args.local_rank in [-1, 0] and args.logging_steps > 0 and args.global_step % args.logging_steps == 0:
-                tb_data = {
-                    'lr': scheduler.get_last_lr()[0],
-                    'acc': tr_ac / args.logging_steps / (
-                            args.train_batch_size * args.gradient_accumulation_steps),
-                    'loss': tr_loss / args.logging_steps
-                }
-                write_tensor_board(tb_writer, tb_data, args.global_step)
-                tr_loss = 0.0
-                tr_ac = 0.0
-
-            if args.valid_step > 0 and args.global_step % args.valid_step == 1:
-                # step invoke validation
-                valid_examples.update_embd(model)
-                valid_accuracy, valid_loss = evaluate_classification(valid_examples, model,
-                                                                     args.per_gpu_eval_batch_size,
-                                                                     "result/train/{}".format(
-                                                                         args.data_name))
-                pk, best_f1, map = evaluate_retrival(model, valid_examples, args.per_gpu_eval_batch_size,
-                                                     "result/train/{}".format(args.data_name))
-                tb_data = {
-                    "valid_accuracy": valid_accuracy,
-                    "valid_loss": valid_loss,
-                    "precision@3": pk,
-                    "best_f1": best_f1,
-                    "MAP": map
-                }
-                write_tensor_board(tb_writer, tb_data, args.global_step)
-        args.steps_trained_in_current_epoch += 1
-
 def train_with_neg_sampling_triplet(args, model, train_examples: Examples, valid_examples: Examples, optimizer,
                             scheduler, tb_writer, step_bar, skip_n_steps):
     """
@@ -139,9 +56,8 @@ def train_with_neg_sampling_triplet(args, model, train_examples: Examples, valid
         if batch == ():
             continue
         model.train()
-        nl_tensor, pos_tensor , neg_tensor = format_triplet_batch_input(batch, train_examples)
-
-        outputs = model(nl_tensor, pos_tensor , neg_tensor)
+        inputs = format_triplet_batch_input(batch, train_examples, model)
+        outputs = model(**inputs)
         loss = outputs['loss']
 
         if args.n_gpu > 1:

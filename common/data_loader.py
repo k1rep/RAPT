@@ -83,7 +83,6 @@ def load_examples(data_dir, model, num_limit, type='train'):
         raw_examples = raw_examples[:num_limit]
     examples = Examples(raw_examples)
     examples.update_features(model, multiprocessing.cpu_count())
-    examples.update_embd(model)
     return examples
 
 

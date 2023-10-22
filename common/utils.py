@@ -45,7 +45,7 @@ def format_batch_input_for_single_bert(batch, examples, model):
     return inputs
 
 
-def format_batch_input(batch, examples):
+def format_batch_input(batch, examples, model):
     """
     move tensors to device
     :param batch:
@@ -53,16 +53,41 @@ def format_batch_input(batch, examples):
     :return:
     """
     nl_ids, pl_ids, labels = batch[0], batch[1], batch[2]
-    nl_embd, pl_embd = examples.id_pair_to_embd_pair(nl_ids, pl_ids)
-    return nl_embd, pl_embd
+    features = examples.id_pair_to_feature_pair(nl_ids, pl_ids)
+    features = [t.to(model.device) for t in features]
+    nl_in, nl_att, pl_in, pl_att = features
+    inputs = {
+        "text_ids": nl_in,
+        "text_attention_mask": nl_att,
+        "code_ids": pl_in,
+        "code_attention_mask": pl_att,
+    }
+    return inputs
 
 
 
-def format_triplet_batch_input(batch, examples):
+def format_triplet_batch_input(batch, examples, model):
+    """
+    move tensors to device
+    :param batch:
+    :param examples:
+    :param model:
+    :return:
+    """
     anchor_ids, pos_cid, neg_cid = batch[0], batch[1], batch[2]
-    nl_tensor, pos_tensor , neg_tensor = examples.id_triplet_to_embd_triplet(nl_id_tensor=anchor_ids, pos_pl_id_tensor=pos_cid,
-                                                      neg_pl_id_tensor=neg_cid)
-    return nl_tensor, pos_tensor , neg_tensor
+    features = examples.id_triplet_to_feature_triplet(nl_id_tensor=anchor_ids, pos_pl_id_tensor=pos_cid, neg_pl_id_tensor=neg_cid)
+    features = [t.to(model.device) for t in features]
+    nl_in, nl_att, pos_pl_in, pos_pl_att, neg_pl_in, neg_pl_att = features
+    inputs = {
+        "text_ids": nl_in,
+        "text_attention_mask": nl_att,
+        "pos_code_ids": pos_pl_in,
+        "pos_code_attention_mask": pos_pl_att,
+        "neg_code_ids": neg_pl_in,
+        "neg_code_attention_mask": neg_pl_att,
+    }
+    return inputs
+
 
 
 def write_tensor_board(tb_writer, data, step):
@@ -145,9 +170,10 @@ def evaluate_classification(eval_examples, model, batch_size, output_dir):
         with torch.no_grad():
             model.eval()
             labels = batch[2].to(model.device)
-            nl_tensor, pl_tensor = eval_examples.id_pair_to_embd_pair(batch[0], batch[1])
-            nl_tensor, pl_tensor = nl_tensor.to(model.device), pl_tensor.to(model.device)
-            y_pred = model.get_sim_score(nl_tensor, pl_tensor) > 0.5
+            inputs = format_batch_input(batch, eval_examples, model)
+            text_hidden = model.create_nl_embd(inputs['text_ids'], inputs['text_attention_mask'])[0]
+            code_hidden = model.create_pl_embd(inputs['code_ids'], inputs['code_attention_mask'])[0]
+            y_pred = model.get_sim_score(text_hidden, code_hidden) > 0.5
             batch_correct = y_pred.eq(labels).long().sum().item()
             num_correct += batch_correct
             eval_num += y_pred.size()[0]
@@ -173,18 +199,17 @@ def evaluate_retrival(model, eval_examples, batch_size, res_dir):
     retrival_dataloader = eval_examples.get_retrivial_task_dataloader(batch_size)
     res = []
     for batch in tqdm(retrival_dataloader, desc="retrival evaluation"):
-        nl_ids = batch[0]
-        pl_ids = batch[1]
-        labels = batch[2]
-        nl_embd, pl_embd = eval_examples.id_pair_to_embd_pair(nl_ids, pl_ids)
-
         with torch.no_grad():
             model.eval()
-            nl_embd = nl_embd.to(model.device)
-            pl_embd = pl_embd.to(model.device)
-            sim_score = model.get_sim_score(text_hidden=nl_embd, code_hidden=pl_embd).cpu()
+            nl_ids = batch[0]
+            pl_ids = batch[1]
+            labels = batch[2].to(model.device)
+            inputs = format_batch_input(batch, eval_examples, model)
+            text_hidden = model.create_nl_embd(inputs['text_ids'], inputs['text_attention_mask'])[0]
+            code_hidden = model.create_pl_embd(inputs['code_ids'], inputs['code_attention_mask'])[0]
+            sim_score = model.get_sim_score(text_hidden=text_hidden, code_hidden=code_hidden).cpu()
             for n, p, prd, lb in zip(nl_ids.tolist(), pl_ids.tolist(), sim_score.tolist(), labels.tolist()):
-                res.append((map_iss.get(n), map_file.get(p), prd, lb))
+                res.append((n, p, prd, lb))
 
     df = results_to_df(res)
     df.to_csv(retr_res_path)

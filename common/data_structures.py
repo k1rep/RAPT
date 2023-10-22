@@ -322,49 +322,6 @@ class Examples:
         return dataset
 
 
-    def make_online_neg_sampling_batch(self, batch: Tuple, model, hard_ratio):
-        """
-        Convert positive examples into
-        :param batch: tuples  containing the positive examples
-        :return:
-        """
-        nl_ids = batch[0].tolist()
-        pl_ids = batch[1].tolist()
-        pos, neg = [], []
-        cand_neg = []
-        for nl_id in nl_ids:
-            for pl_id in pl_ids:
-                label = 1 if self.__is_positive_case(nl_id, pl_id) else 0
-                if label == 0:
-                    cand_neg.append((nl_id, pl_id, 0))
-                else:
-                    pos.append((nl_id, pl_id, 1))
-        neg_loader = DataLoader(cand_neg, batch_size=len(batch))
-        neg_slots = len(pos)
-        hard_neg_slots = max(1, int(hard_ratio * neg_slots))
-        rand_neg_slots = max(0, neg_slots - hard_neg_slots)
-        for neg_batch in neg_loader:
-            with torch.no_grad():
-                model.eval()
-                inputs = format_batch_input(neg_batch, self, model)
-                outputs = model(**inputs)
-                logits = outputs['logits']
-                pred = torch.softmax(logits, 1).data.tolist()
-                for nl, pl, score in zip(neg_batch[0].tolist(), neg_batch[1].tolist(), pred):
-                    neg.append((nl, pl, score[1]))
-
-        hard_negs = [(x[0], x[1], 0) for x in
-                     heapq.nlargest(hard_neg_slots, neg, key=lambda x: x[2])]  # repalce score with label
-        rand_negs = random.choices(cand_neg, k=rand_neg_slots)
-        res = pos + hard_negs + rand_negs
-        random.shuffle(res)
-        r_nl, r_pl, r_label = [], [], []
-        for r in res:
-            r_nl.append(r[0])
-            r_pl.append(r[1])
-            r_label.append(r[2])
-        return (torch.Tensor(r_nl), torch.Tensor(r_pl), torch.Tensor(r_label).long())
-
     def make_online_triplet_sampling_batch(self, batch: Tuple, model):
         nl_ids = batch[0].tolist()
         pl_ids = batch[1].tolist()
@@ -381,8 +338,10 @@ class Examples:
         for neg_batch in neg_loader:
             with torch.no_grad():
                 model.eval()
-                nl_embd, pl_embd = format_batch_input(neg_batch, self)
-                sim_scores = model.get_sim_score(text_hidden=nl_embd, code_hidden=pl_embd)
+                inputs = format_batch_input(neg_batch, self, model)
+                text_hidden = model.create_nl_embd(inputs['text_ids'], inputs['text_attention_mask'])[0]
+                code_hidden = model.create_pl_embd(inputs['code_ids'], inputs['code_attention_mask'])[0]
+                sim_scores = model.get_sim_score(text_hidden=text_hidden, code_hidden=code_hidden)
                 for nl, pl, score in zip(neg_batch[0].tolist(), neg_batch[1].tolist(), sim_scores.tolist()):
                     neg[nl].append((pl, score))
 
