@@ -1,8 +1,11 @@
+import os.path
+
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from transformers import AutoTokenizer, AutoModel, PreTrainedModel
 import torch.nn.functional as F
+
 
 
 class AvgPooler(nn.Module):
@@ -47,10 +50,10 @@ class RelationClassifyHeader(nn.Module):
 
 
 class TBertT(PreTrainedModel):
-    def __init__(self, config, code_bert):
+    def __init__(self, config, args):
         super().__init__(config)
         # nbert_model = "huggingface/CodeBERTa-small-v1"
-        cbert_model = code_bert
+        cbert_model = args.code_bert
 
         self.ctokneizer = AutoTokenizer.from_pretrained(cbert_model,local_files_only = True)
         self.cbert = AutoModel.from_pretrained(cbert_model,local_files_only = True)

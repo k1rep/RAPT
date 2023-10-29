@@ -118,7 +118,7 @@ def init_train_env(args):
     if args.local_rank not in [-1, 0]:
         # Make sure only the first process in distributed training will download model & vocab
         torch.distributed.barrier()
-    model = TBertT(BertConfig(), args.code_bert)
+    model = TBertT(BertConfig(), args)
     if args.local_rank == 0:
         # Make sure only the first process in distributed training will download model & vocab
         torch.distributed.barrier()
