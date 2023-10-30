@@ -29,11 +29,16 @@ if __name__ == "__main__":
         os.makedirs(args.output_dir)
 
     model = TBertT(BertConfig(), args)
+    # lora
     if args.model_path and os.path.exists(args.model_path):
         model_path = os.path.join(args.model_path, MODEL_FNAME)
         model.load_state_dict(torch.load(model_path), strict=False)
         peft_model_id = r'./output/' + args.data_name + '/lora'
         model.cbert = PeftModel.from_pretrained(model.cbert, peft_model_id)
+    # bert
+    if args.model_path and os.path.exists(args.model_path):
+        model_path = os.path.join(args.model_path, MODEL_FNAME)
+        model.load_state_dict(torch.load(model_path), strict=False)
     else:
         raise Exception("evaluation model not found")
     logger.info("model loaded")
@@ -45,3 +50,5 @@ if __name__ == "__main__":
     m = test(args, model, test_examples, cache_file=cached_file)
     exe_time = time.time() - start_time
     m.write_summary(exe_time)
+
+

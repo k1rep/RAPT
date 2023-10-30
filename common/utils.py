@@ -127,6 +127,16 @@ def save_examples(exampls, output_file):
 
 def save_check_point(model, ckpt_dir, args, optimizer, scheduler):
     logger.info("Saving checkpoint to %s", ckpt_dir)
+    if not os.path.exists(ckpt_dir):
+        os.makedirs(ckpt_dir)
+    torch.save(model.state_dict(), os.path.join(ckpt_dir, MODEL_FNAME))
+    torch.save(args, os.path.join(ckpt_dir, ARG_FNAME))
+    torch.save(optimizer.state_dict(), os.path.join(ckpt_dir, OPTIMIZER_FNAME))
+    torch.save(scheduler.state_dict(), os.path.join(ckpt_dir, SCHED_FNAME))
+
+
+def save_check_point_lora(model, ckpt_dir, args, optimizer, scheduler):
+    logger.info("Saving checkpoint to %s", ckpt_dir)
     # if not os.path.exists(ckpt_dir):
     #     os.makedirs(ckpt_dir)
     peft_model_id = r'./output/'+args.data_name+'/lora'
@@ -144,9 +154,15 @@ def load_check_point(model, ckpt_dir):
         "Loading checkpoint from {}".format(ckpt_dir))
     model_path = os.path.join(ckpt_dir, MODEL_FNAME)
     model.load_state_dict(torch.load(model_path), strict=False)
+    return {'model': model}
+
+
+def load_check_point_lora(model, ckpt_dir):
+    logger.info(
+        "Loading checkpoint from {}".format(ckpt_dir))
+    model_path = os.path.join(ckpt_dir, MODEL_FNAME)
+    model.load_state_dict(torch.load(model_path), strict=False)
     model.cbert = get_peft_model(model.cbert, peft_config)
-
-
     return {'model': model}
 
 
