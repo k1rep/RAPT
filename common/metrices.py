@@ -157,12 +157,12 @@ class metrics:
         rk3 = self.recall_at_K(3)
         rk5 = self.recall_at_K(5)
         rk10 = self.recall_at_K(10)
-        top1=self.top_at_K(1)
-        top3=self.top_at_K(3)
-        top5=self.top_at_K(5)
-        top10=self.top_at_K(10)
+        top1 = self.top_at_K(1)
+        top3 = self.top_at_K(3)
+        top5 = self.top_at_K(5)
+        top10 = self.top_at_K(10)
 
-        best_f1, best_f2, details, f1_threshold = self.precision_recall_curve("pr_curve.png")
+        # best_f1, best_f2, details, f1_threshold = self.precision_recall_curve("pr_curve.png")
         map = self.MAP_at_K(3)
         mrr = self.MRR()
         return {
@@ -178,12 +178,12 @@ class metrics:
             'top3': top3,
             'top5': top5,
             'top10': top10,
-            'f1': best_f1,
-            'f2': best_f2,
+            # 'f1': best_f1,
+            # 'f2': best_f2,
             'map': map,
             'mrr': mrr,
-            'details': details,
-            'f1_threshold': f1_threshold
+            # 'details': details,
+            # 'f1_threshold': f1_threshold
         }
 
     def write_summary(self, exe_time):
@@ -192,9 +192,9 @@ class metrics:
         pk10, pk5, pk3,pk1 = res['pk10'], res['pk5'], res['pk3'],res['pk1']
         rk10, rk5, rk3,rk1 = res['rk10'], res['rk5'], res['rk3'],res['rk1']
         top10, top5, top3,top1 = res['top10'], res['top5'], res['top3'],res['top1']
-        best_f1, best_f2, details = res['f1'], res['f2'], res['details']
+        # best_f1, best_f2, details = res['f1'], res['f2'], res['details']
         map, mrr = res['map'], res['mrr']
-        summary = "\npk10={}, pk5={},pk3={},pk1 = {}, rk10={},rk5={},rk3={},rk1={},top10={},top5={},top3={},top1={}, MAP={}, MRR={}, exe_time={},f1_threshold={}\n".format(
+        summary = "\npk10={}, pk5={},pk3={},pk1 = {}, rk10={},rk5={},rk3={},rk1={},top10={},top5={},top3={},top1={}, MAP={}, MRR={}, exe_time={}\n".format(
             pk10,
             pk5,
             pk3,
@@ -210,12 +210,11 @@ class metrics:
             map,
             mrr,
             exe_time,
-            res['f1_threshold']
+            # res['f1_threshold']
         )
-        result_list=[map,mrr,pk1, pk3, pk5,pk10,rk1, rk3, rk5,rk10,top1,top3,top5,top10]
         with open(summary_path, 'w') as fout:
             fout.write(summary)
-            fout.write(str(details))
+            # fout.write(str(details))
         print(summary)
 
 

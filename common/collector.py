@@ -17,21 +17,15 @@ logger = logging.getLogger(__name__)
 
 
 class Issue:
-    def __init__(self, issue_id: str, desc: str, comments: str, create_time, close_time):
+    def __init__(self, issue_id: str, desc: str, commit_time):
         self.issue_id = issue_id
         self.desc = "" if pd.isnull(desc) else desc
-        # self.desc = desc
-        self.comments = comments
-        self.create_time = create_time
-        self.close_time = close_time
-
+        self.commit_time = commit_time
     def to_dict(self):
         return {
             "issue_id": self.issue_id,
             "issue_desc": self.desc,
-            "issue_comments": self.comments,
-            "closed_at": self.create_time,
-            "created_at": self.close_time
+            "commit_time": self.commit_time
         }
 
     def __str__(self):
@@ -39,19 +33,15 @@ class Issue:
 
 
 class Commit:
-    def __init__(self, commit_id, summary, diffs, files, commit_time):
+    def __init__(self, commit_id, summary, commit_time):
         self.commit_id = commit_id
         self.summary = summary
-        self.diffs = diffs
-        self.files = files
         self.commit_time = commit_time
 
     def to_dict(self):
         return {
             "commit_id": self.commit_id,
             "summary": self.summary,
-            "diff": self.diffs,
-            "files": self.files,
             "commit_time": self.commit_time
         }
 

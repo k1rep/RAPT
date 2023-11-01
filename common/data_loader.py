@@ -15,18 +15,16 @@ import common.utils
 sys.path.append("..")
 sys.path.append("../..")
 
-# from git_repo_collector import GitRepoCollector, Commit, Issue
 from common.collector import Commit, Issue
 from nltk.tokenize import word_tokenize
 import numpy as np
 from common.data_structures import Examples
-from common.models import TBertT
 
 logger = logging.getLogger(__name__)
 
 def read_OSS_examples(data_dir, type):
-    commit_file = os.path.join(data_dir, "commit_file.csv")
-    issue_file = os.path.join(data_dir, "issue_file.csv")
+    commit_file = os.path.join(data_dir, "file_diff.csv")
+    issue_file = os.path.join(data_dir, "bug_report.csv")
     link_file = os.path.join(data_dir, "link_file.csv")
     examples = []
     issues = __read_artifacts(issue_file, "issue")
@@ -47,14 +45,16 @@ def read_OSS_examples(data_dir, type):
         iss = issue_index[lk[0]]
         cm_list = commit_index[lk[1]]
         # join the tokenized content
-        iss_text = str(iss.desc) + " " + iss.comments
+        iss_text = str(iss.desc)
         for cm in cm_list:
-            cm_text = str(cm.summary) + " " + cm.diffs
+            cm_text = str(cm.summary)
             example = {
                 "NL": iss_text,
                 "NID": iss.issue_id,
+                'NTIME':iss.commit_time,
                 "PL": cm_text,
-                "PID": cm.commit_id
+                "PID": cm.commit_id,
+                "PTIME":cm.commit_time
             }
             examples.append(example)
     if type == 'test':
@@ -62,12 +62,14 @@ def read_OSS_examples(data_dir, type):
         for i in intersection:
             cm_list = commit_index[i]
             for cm in cm_list:
-                cm_text = str(cm.summary) + " " + cm.diffs
+                cm_text = str(cm.summary)
                 example = {
                     "NL": "unlabeled!!",
                     "NID": -1,
+                    'NTIME': iss.commit_time,
                     "PL": cm_text,
-                    "PID": cm.commit_id
+                    "PID": cm.commit_id,
+                    "PTIME": cm.commit_time
                 }
                 examples.append(example)
     return examples
@@ -117,12 +119,12 @@ def __read_artifacts(file_path, type):
     arti = []
     for index, row in df.iterrows():
         if type == 'commit':
-            art = Commit(commit_id=row['commit_id'], summary=row['summary'], diffs=row['diff'], files=row['files'], commit_time=row['commit_time'])
+            art = Commit(commit_id=row['file_diff_id'], summary=row['file_diff'], commit_time=row['commit_time'])
         elif type == "issue":
-            art = Issue(issue_id=row['issue_id'], desc=row['issue_desc'], comments=row['issue_comments'], create_time=row['created_at'], close_time=row['closed_at'])
+            art = Issue(issue_id=row['bug_report_id'], desc=row['bug_report_desc'], commit_time =row['bug_report_time'])
         elif type == "link":
-            iss_id = row["issue_id"]
-            cm_id = row["commit_id"]
+            iss_id = row["bug_report_id"]
+            cm_id = row["file_diff_id"]
             art = (iss_id, cm_id)
         else:
             raise Exception("wrong artifact type")

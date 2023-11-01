@@ -7,7 +7,7 @@ import numpy as np
 from tqdm import tqdm
 
 from common.metrices import metrics
-from common.utils import results_to_df, map_file, map_iss
+from common.utils import results_to_df, map_file, map_iss, time_iss, time_file
 
 
 def get_eval_args():
@@ -30,19 +30,15 @@ def get_eval_args():
     return args
 
 
-def test(args, model, eval_examples, cache_file, batch_size=1000):
+def test(args, model, eval_examples, batch_size=1000):
     args.output_dir = os.path.join(args.output_dir, args.data_name)
     if not os.path.isdir(args.output_dir):
         os.makedirs(args.output_dir)
     retr_res_path = os.path.join(args.output_dir, "raw_result.csv")
 
-    if args.overwrite or not os.path.isfile(cache_file):
-        chunked_retrivial_examples = eval_examples.get_chunked_retrivial_task_examples_all(
-            chunk_query_num=args.chunk_query_num,
-            chunk_size=batch_size)
-        torch.save(chunked_retrivial_examples, cache_file)
-    else:
-        chunked_retrivial_examples = torch.load(cache_file)
+    chunked_retrivial_examples = eval_examples.get_chunked_retrivial_task_examples_all(
+        chunk_query_num=args.chunk_query_num,
+        chunk_size=batch_size)
     retrival_dataloader = DataLoader(chunked_retrivial_examples, batch_size=args.per_gpu_eval_batch_size)
     res = []
     for batch in tqdm(retrival_dataloader, desc="retrival evaluation"):
@@ -57,11 +53,15 @@ def test(args, model, eval_examples, cache_file, batch_size=1000):
             pl_embd = pl_embd.to(model.device)
             sim_score = model.get_sim_score(text_hidden=nl_embd, code_hidden=pl_embd).cpu()
             for n, p, prd, lb in zip(nl_ids.tolist(), pl_ids.tolist(), sim_score.tolist(), labels.tolist()):
-                res.append((map_iss.get(n), map_file.get(p), prd, lb))
+                res.append((map_iss.get(n), map_file.get(p), prd, lb, time_iss.get(n), time_file.get(p)))
 
     df = results_to_df(res)
+    df = df[df.time_iss > df.time_file].reset_index()
     df = df.groupby(['s_id', 't_id']).agg({'pred': sum, 'label': np.mean}).reset_index()
     df.to_csv(retr_res_path)
     m = metrics(df, output_dir=args.output_dir)
     return m
+
+
+
 

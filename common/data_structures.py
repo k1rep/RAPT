@@ -11,7 +11,7 @@ from tqdm import tqdm
 from common.models import TBertT
 from torch import Tensor
 
-from common.utils import format_batch_input, map_file, map_iss, format_batch_input_for_single_bert
+from common.utils import format_batch_input, map_file, map_iss, format_batch_input_for_single_bert, time_file, time_iss
 
 F_ID = 'id'
 F_TOKEN = 'tokens'
@@ -105,6 +105,7 @@ class Examples:
                 pl_id_max += 1
             PL_index[pl_id] = {F_TOKEN: pl_tks, F_ID: pl_id}
             map_file[pl_id] = r_exp['PID']
+            time_file[pl_id] = r_exp['PTIME']
 
             if r_exp["NID"] == -1:
                 continue
@@ -118,6 +119,7 @@ class Examples:
                 nl_id_max += 1
             NL_index[nl_id] = {F_TOKEN: nl_tks, F_ID: nl_id}
             map_iss[nl_id] = r_exp['NID']
+            time_iss[nl_id] = r_exp['NTIME']
 
             rel_index[nl_id].add(pl_id)
         return NL_index, PL_index, rel_index

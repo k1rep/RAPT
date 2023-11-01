@@ -20,6 +20,8 @@ ARG_FNAME = "training_args.bin"
 logger = logging.getLogger(__name__)
 map_file={}
 map_iss={}
+time_file={}
+time_iss={}
 
 peft_config = LoraConfig(
     task_type=TaskType.FEATURE_EXTRACTION,
@@ -172,6 +174,8 @@ def results_to_df(res: List[Tuple]) -> DataFrame:
     df['t_id'] = [x[1] for x in res]
     df['pred'] = [x[2] for x in res]
     df['label'] = [x[3] for x in res]
+    df['time_iss'] = [x[4] for x in res]
+    df['time_file'] = [x[5] for x in res]
     return df
 
 
@@ -240,9 +244,11 @@ def evaluate_retrival(model, eval_examples, batch_size, res_dir):
             code_hidden = model.create_pl_embd(inputs['code_ids'], inputs['code_attention_mask'])[0]
             sim_score = model.get_sim_score(text_hidden=text_hidden, code_hidden=code_hidden).cpu()
             for n, p, prd, lb in zip(nl_ids.tolist(), pl_ids.tolist(), sim_score.tolist(), labels.tolist()):
-                res.append((n, p, prd, lb))
+                res.append((map_iss.get(n), map_file.get(p), prd, lb, time_iss.get(n), time_file.get(p)))
 
     df = results_to_df(res)
+    df = df[df.time_iss > df.time_file].reset_index()
+    df = df.groupby(['s_id', 't_id']).agg({'pred': sum, 'label': np.mean}).reset_index()
     df.to_csv(retr_res_path)
     m = metrics(df, output_dir=res_dir)
 

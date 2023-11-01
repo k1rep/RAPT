@@ -30,11 +30,11 @@ if __name__ == "__main__":
 
     model = TBertT(BertConfig(), args)
     # lora
-    if args.model_path and os.path.exists(args.model_path):
-        model_path = os.path.join(args.model_path, MODEL_FNAME)
-        model.load_state_dict(torch.load(model_path), strict=False)
-        peft_model_id = r'./output/' + args.data_name + '/lora'
-        model.cbert = PeftModel.from_pretrained(model.cbert, peft_model_id)
+    # if args.model_path and os.path.exists(args.model_path):
+    #     model_path = os.path.join(args.model_path, MODEL_FNAME)
+    #     model.load_state_dict(torch.load(model_path), strict=False)
+    #     peft_model_id = r'./output/' + args.data_name + '/lora'
+    #     model.cbert = PeftModel.from_pretrained(model.cbert, peft_model_id)
     # bert
     if args.model_path and os.path.exists(args.model_path):
         model_path = os.path.join(args.model_path, MODEL_FNAME)
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     test_dir = os.path.join(args.data_dir, "test")
     test_examples = load_examples(test_dir, model=model, num_limit=args.test_num, type='test')
     test_examples.update_embd(model)
-    m = test(args, model, test_examples, cache_file=cached_file)
+    m = test(args, model, test_examples)
     exe_time = time.time() - start_time
     m.write_summary(exe_time)
 
