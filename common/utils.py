@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import pandas as pd
 from pandas import DataFrame
-from peft import PeftModel, get_peft_model, LoraConfig, TaskType
+# from peft import PeftModel, get_peft_model, LoraConfig, TaskType
 from tqdm import tqdm
 
 from common.metrices import metrics
@@ -23,14 +23,14 @@ map_iss={}
 time_file={}
 time_iss={}
 
-peft_config = LoraConfig(
-    task_type=TaskType.FEATURE_EXTRACTION,
-    inference_mode=False,
-    r=8,
-    lora_alpha=32,
-    lora_dropout=0.1,
-    target_modules=["query", "value"],
-)
+# peft_config = LoraConfig(
+#     task_type=TaskType.FEATURE_EXTRACTION,
+#     inference_mode=False,
+#     r=8,
+#     lora_alpha=32,
+#     lora_dropout=0.1,
+#     target_modules=["query", "value"],
+# )
 
 def format_batch_input_for_single_bert(batch, examples, model):
     tokenizer = model.tokenizer
@@ -248,16 +248,16 @@ def evaluate_retrival(model, eval_examples, batch_size, res_dir):
 
     df = results_to_df(res)
     df = df[df.time_iss > df.time_file].reset_index()
-    df = df.groupby(['s_id', 't_id']).agg({'pred': sum, 'label': np.mean}).reset_index()
+    df = df.groupby(['s_id', 't_id']).agg({'pred': sum, 'label': np.max}).reset_index()
     df.to_csv(retr_res_path)
     m = metrics(df, output_dir=res_dir)
 
     pk = m.precision_at_K(3)
-    best_f1, best_f2, details, _ = m.precision_recall_curve("pr_curve.png")
+    # best_f1, best_f2, details, _ = m.precision_recall_curve("pr_curve.png")
     map = m.MAP_at_K(3)
 
-    summary = "\nprecision@3={}, best_f1 = {}, best_f2={}， MAP={}\n".format(pk, best_f1, best_f2, map)
+    summary = "\nprecision@3={}, MAP={}\n".format(pk, map)
     with open(summary_path, 'w') as fout:
         fout.write(summary)
-        fout.write(str(details))
-    return pk, best_f1, map
+        # fout.write(str(details))
+    return pk, map

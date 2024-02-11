@@ -70,7 +70,7 @@ def get_train_args():
         help="The ration of hard negative examples in a batch during negative sample mining"
     )
     parser.add_argument("--warmup_steps", default=0, type=int, help="Linear warmup over warmup_steps.")
-    parser.add_argument("--code_bert", default='../codebert',
+    parser.add_argument("--code_bert", default='/nvme3n1/LiYworks/RAPT/trace/codebert',
                         choices=['microsoft/codebert-base', 'huggingface/CodeBERTa-small-v1',
                                  'codistai/codeBERT-small-v2'],
                         help="Negative sampling strategy we apply for constructing dataset. ")

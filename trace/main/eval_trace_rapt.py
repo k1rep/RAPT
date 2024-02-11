@@ -4,7 +4,7 @@ import sys
 import time
 
 import torch
-from peft import PeftModel
+# from peft import PeftModel
 from transformers import BertConfig
 
 sys.path.append("..")
@@ -42,7 +42,6 @@ if __name__ == "__main__":
     else:
         raise Exception("evaluation model not found")
     logger.info("model loaded")
-    print(model)
     start_time = time.time()
     test_dir = os.path.join(args.data_dir, "test")
     test_examples = load_examples(test_dir, model=model, num_limit=args.test_num, type='test')

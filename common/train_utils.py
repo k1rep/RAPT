@@ -38,7 +38,7 @@ def get_exp_name(args):
     return exp_name.format(time, base_model)
 
 
-def train_with_neg_sampling_triplet(args, model, train_examples: Examples, valid_examples: Examples, optimizer,
+def train_with_neg_sampling_triplet(args, model, train_examples: Examples, optimizer,
                             scheduler, tb_writer, step_bar, skip_n_steps):
     """
     Create training dataset at epoch level.
@@ -53,8 +53,6 @@ def train_with_neg_sampling_triplet(args, model, train_examples: Examples, valid
             skip_n_steps -= 1
             continue
         batch = train_examples.make_online_triplet_sampling_batch(batch, model)
-        if batch == ():
-            continue
         model.train()
         inputs = format_triplet_batch_input(batch, train_examples, model)
         outputs = model(**inputs)
@@ -98,20 +96,19 @@ def train_with_neg_sampling_triplet(args, model, train_examples: Examples, valid
                 tr_loss = 0.0
                 tr_ac = 0.0
 
-            if args.valid_step > 0 and args.global_step % args.valid_step == 1:
-                valid_accuracy = evaluate_classification(valid_examples, model,
-                                                                     args.per_gpu_eval_batch_size,
-                                                                     "result/train/{}".format(
-                                                                         args.data_name))
-                pk, best_f1, map = evaluate_retrival(model, valid_examples, args.per_gpu_eval_batch_size,
-                                                     "result/train/{}".format(args.data_name))
-                tb_data = {
-                    "valid_accuracy": valid_accuracy,
-                    "precision@3": pk,
-                    "best_f1": best_f1,
-                    "MAP": map
-                }
-                write_tensor_board(tb_writer, tb_data, args.global_step)
+            # if args.valid_step > 0 and args.global_step % args.valid_step == 1:
+            #     valid_accuracy = evaluate_classification(valid_examples, model,
+            #                                                          args.per_gpu_eval_batch_size,
+            #                                                          "result/train/{}".format(
+            #                                                              args.data_name))
+            #     pk, map = evaluate_retrival(model, valid_examples, args.per_gpu_eval_batch_size,
+            #                                          "result/train/{}".format(args.data_name))
+            #     tb_data = {
+            #         "valid_accuracy": valid_accuracy,
+            #         "precision@3": pk,
+            #         "MAP": map
+            #     }
+            #     write_tensor_board(tb_writer, tb_data, args.global_step)
         args.steps_trained_in_current_epoch += 1
 
 
@@ -132,7 +129,7 @@ def get_optimizer_scheduler(args, model, train_steps):
     return optimizer, scheduler
 
 
-def train(args, train_examples, valid_examples, model, train_iter_method):
+def train(args, train_examples, model, train_iter_method):
     """
 
     :param args:
@@ -194,7 +191,7 @@ def train(args, train_examples, valid_examples, model, train_iter_method):
     step_bar = tqdm(initial=args.epochs_trained, total=t_total, desc="Steps")
     for _ in train_iterator:
         params = (
-            args, model, train_examples, valid_examples, optimizer, scheduler, tb_writer, step_bar,
+            args, model, train_examples, optimizer, scheduler, tb_writer, step_bar,
             skip_n_steps_in_epoch)
 
         train_iter_method(*params)

@@ -30,8 +30,10 @@ RETRIVE_NEG_SAMP_CACHE = 'retrive_neg_epoch_{}.cache'
 def exclude_and_sample(sample_pool, exclude, num):
     for id in exclude:
         sample_pool.remove(id)
-#    selected = np.random.choice(list(sample_pool), num)
-    selected = random.sample(list(sample_pool), num)
+    if list(sample_pool)==[]:
+        return []
+    selected = np.random.choice(list(sample_pool), num)
+#     selected = random.sample(list(sample_pool), num)
     return selected
 
 
@@ -67,12 +69,22 @@ class Examples:
     """
 
     def __init__(self, raw_examples: List):
-        self.NL_index, self.PL_index, self.rel_index = self.__index_exmaple(raw_examples)
+        self.NL_index, self.PL_index, self.rel_index, self.rel_file_index = self.__index_exmaple(raw_examples)
 
+        # 按照变更集
+        # def __is_positive_case(self, nl_id, pl_id):
+        #     if nl_id not in self.rel_index:
+        #         return False
+        #     rel_pls = set(self.rel_index[nl_id])
+        #     return pl_id in rel_pls
+
+        # 按照文件集
     def __is_positive_case(self, nl_id, pl_id):
-        if nl_id not in self.rel_index:
+        nl_id = map_iss[nl_id]
+        pl_id = map_file[pl_id]
+        if nl_id not in self.rel_file_index:
             return False
-        rel_pls = set(self.rel_index[nl_id])
+        rel_pls = set(self.rel_file_index[nl_id])
         return pl_id in rel_pls
 
     def __len__(self):
@@ -86,6 +98,7 @@ class Examples:
         :return:
         """
         rel_index = defaultdict(set)
+        rel_file_index = defaultdict(set)
         NL_index = dict()  # find instance by id
         PL_index = dict()
 
@@ -93,21 +106,22 @@ class Examples:
         reverse_NL_index = dict()
         reverse_PL_index = dict()
 
-        nl_id_max = 0
-        pl_id_max = 0
+        nl_id_max = 0 if list(map_iss.keys())==[] else max(list(map_iss.keys()))+1
+        pl_id_max = 0 if list(map_file.keys())==[] else max(list(map_file.keys()))+1
         for r_exp in raw_examples:
             pl_tks = r_exp["PL"]
-            if pl_tks in reverse_PL_index:
-                pl_id = reverse_PL_index[pl_tks]
+            pl_fid = r_exp['PID']
+            if (pl_fid,pl_tks) in reverse_PL_index:
+                pl_id = reverse_PL_index[(pl_fid,pl_tks)]
             else:
-                reverse_PL_index[pl_tks] = pl_id_max
+                reverse_PL_index[(pl_fid,pl_tks)] = pl_id_max
                 pl_id = pl_id_max
                 pl_id_max += 1
             PL_index[pl_id] = {F_TOKEN: pl_tks, F_ID: pl_id}
             map_file[pl_id] = r_exp['PID']
             time_file[pl_id] = r_exp['PTIME']
 
-            if r_exp["NID"] == -1:
+            if r_exp["NID"] == -1 or r_exp["NL"] == "NoData":
                 continue
 
             nl_tks = clean_space(r_exp["NL"])
@@ -122,10 +136,11 @@ class Examples:
             time_iss[nl_id] = r_exp['NTIME']
 
             rel_index[nl_id].add(pl_id)
-        return NL_index, PL_index, rel_index
+            rel_file_index[map_iss[nl_id]].add(map_file[pl_id])
+        return NL_index, PL_index, rel_index, rel_file_index
 
     def _gen_feature(self, example, tokenizer):
-        feature = tokenizer.encode_plus(example[F_TOKEN], max_length=512, truncation=True,
+        feature = tokenizer.encode_plus(example[F_TOKEN], max_length=256, truncation=True,
                                         padding='max_length', return_attention_mask=True,
                                         return_token_type_ids=False)
         res = {
@@ -143,7 +158,7 @@ class Examples:
             padding='max_length',
             return_attention_mask=True,
             return_token_type_ids=True,
-            max_length=512,
+            max_length=256,
             add_special_tokens=True
         )
         res = {
@@ -351,7 +366,7 @@ class Examples:
             if len(neg[nl_id]):
                 hard_neg_exmp = heapq.nlargest(1, neg[nl_id], key=lambda x: x[1])[0]
                 res.append((nl_id, pl_id, hard_neg_exmp[0]))
-
+        
         r_nl, r_pos, r_neg = [], [], []
         for r in res:
             r_nl.append(r[0])

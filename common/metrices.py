@@ -4,6 +4,7 @@ import pandas as pd
 from pandas import DataFrame
 from sklearn.metrics import precision_recall_curve, PrecisionRecallDisplay
 import matplotlib.pyplot as plt
+import openpyxl
 
 
 class metrics:
@@ -212,6 +213,12 @@ class metrics:
             exe_time,
             # res['f1_threshold']
         )
+        result_list=[pk10,pk5,pk3,pk1,rk10,rk5,rk3,rk1,top10,top5,top3,top1,map,mrr]
+        workbook = openpyxl.load_workbook('result.xlsx')
+        worksheet = workbook.active
+        worksheet.append(result_list)
+        workbook.save('result.xlsx')
+        workbook.close()
         with open(summary_path, 'w') as fout:
             fout.write(summary)
             # fout.write(str(details))

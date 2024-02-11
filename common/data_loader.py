@@ -114,7 +114,7 @@ def __read_artifact_dict(file_path, type):
 
 
 def __read_artifacts(file_path, type):
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path).drop_duplicates()
     df = df.replace(np.nan,'',regex=True)
     arti = []
     for index, row in df.iterrows():

@@ -21,7 +21,7 @@ def get_eval_args():
                         help="The number of true links used for evaluation. The retrival task is build around the true links")
     parser.add_argument("--output_dir", default="./result/test", help="directory to store the results")
     parser.add_argument("--overwrite", action="store_true", help="overwrite the cached data")
-    parser.add_argument("--code_bert", default="../../trace/codebert", help="the base bert")
+    parser.add_argument("--code_bert", default="/nvme3n1/LiYworks/RAPT/trace/codebert", help="the base bert")
     parser.add_argument("--chunk_query_num", default=-1, type=int,
                         help="The number of queries in each chunk of retrivial task")
     parser.add_argument("--per_gpu_eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.")
@@ -57,7 +57,7 @@ def test(args, model, eval_examples, batch_size=1000):
 
     df = results_to_df(res)
     df = df[df.time_iss > df.time_file].reset_index()
-    df = df.groupby(['s_id', 't_id']).agg({'pred': sum, 'label': np.mean}).reset_index()
+    df = df.groupby(['s_id', 't_id']).agg({'pred': sum, 'label': np.max}).reset_index()
     df.to_csv(retr_res_path)
     m = metrics(df, output_dir=args.output_dir)
     return m
